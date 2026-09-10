@@ -1,0 +1,101 @@
+.lp-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 5rem;
+  background-color: var(--nav-bg);
+  backdrop-filter: blur(10px);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.lp-logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.lp-logo img {
+  height: 40px;
+  width: auto;
+}
+.lp-logo-text h2 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+.lp-logo-text h2 span {
+  color: var(--primary-green);
+}
+.lp-logo-text p {
+  margin: 0;
+  font-size: 0.65rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lp-nav-links {
+  display: flex;
+  gap: 2.5rem;
+  list-style: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+.lp-nav-links li {
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.lp-nav-links li:hover {
+  color: var(--primary-green);
+}
+.lp-nav-links li.active {
+  color: var(--primary-green);
+  border-bottom: 2px solid var(--primary-green);
+  padding-bottom: 4px;
+}
+
+.lp-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.theme-toggle {
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+.theme-toggle:hover {
+  background-color: var(--card-border);
+}
+
+.btn-login {
+  background-color: var(--primary-green);
+  color: white;
+  padding: 0.6rem 1.25rem;
+  border-radius: 6px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+}
+.btn-login:hover { 
+  background-color: #059669; 
+}

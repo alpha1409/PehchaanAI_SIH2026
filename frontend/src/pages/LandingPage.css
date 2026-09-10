@@ -1,0 +1,38 @@
+.landing-page {
+  /* LIGHT THEME VARIABLES (Default) */
+  --bg-color: #fbfcfd;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --nav-bg: rgba(251, 252, 253, 0.9);
+  --btn-outline-border: #cbd5e1;
+  --btn-outline-text: #0f172a;
+  --card-bg: #ffffff;
+  --card-border: #e2e8f0;
+  --badge-bg: rgba(16, 185, 129, 0.1);
+  --map-opacity: 0.05;
+  --primary-green: #10b981;
+  
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  min-height: 100vh;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.landing-page.dark {
+  /* DARK THEME VARIABLES */
+  --bg-color: #040d1a;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --nav-bg: rgba(4, 13, 26, 0.9);
+  --btn-outline-border: #334155;
+  --btn-outline-text: #f8fafc;
+  --card-bg: rgba(15, 23, 42, 0.6);
+  --card-border: #1e293b;
+  --badge-bg: rgba(16, 185, 129, 0.15);
+  --map-opacity: 0.15;
+}
+
+/* Global Utility Classes */
+.text-green { color: var(--primary-green); }
