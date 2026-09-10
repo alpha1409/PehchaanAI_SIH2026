@@ -1,0 +1,112 @@
+.modules-section {
+  background-color: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.75rem;
+}
+
+.module-card {
+  background-color: var(--bg-color);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 2.25rem 2rem;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.02);
+}
+
+.module-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--primary-green);
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.08);
+}
+
+.module-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.module-icon {
+  background-color: var(--badge-bg, rgba(16, 185, 129, 0.1));
+  color: var(--primary-green, #10b981);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  transition: transform 0.2s ease;
+}
+
+.module-card:hover .module-icon {
+  transform: scale(1.06);
+}
+
+.module-badge-tag {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--primary-green, #10b981);
+  background-color: var(--badge-bg);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.module-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 0.85rem 0;
+  line-height: 1.3;
+}
+
+.module-desc {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0 0 1.5rem 0;
+  flex: 1;
+}
+
+.module-features {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--card-border);
+}
+
+.module-feature-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+}
+
+.feature-check-icon {
+  color: var(--primary-green, #10b981);
+  flex-shrink: 0;
+}
+
+@media (max-width: 1024px) {
+  .modules-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .modules-grid {
+    grid-template-columns: 1fr;
+  }
+}
