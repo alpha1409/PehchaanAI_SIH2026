@@ -113,12 +113,16 @@ async def analyze_document(files: List[UploadFile] = File(...)):
                     first_contents = contents
                     first_img_array = img_array
                     
-                # --- OpenCV Image Preprocessing ---
+                # --- OpenCV Image Preprocessing (In-the-wild pipeline) ---
                 img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
                 gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
                 
-                # Run OCR on the full grayscaled image
-                file_results = reader.readtext(gray, detail=0)
+                # 1. CLAHE (Contrast Limited Adaptive Histogram Equalization) to fix shadows/glare
+                clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+                enhanced_gray = clahe.apply(gray)
+                
+                # Run OCR on the enhanced grayscaled image
+                file_results = reader.readtext(enhanced_gray, detail=0)
                 results.extend(file_results)
                 
                 # Detect QR codes on all panels
@@ -152,12 +156,21 @@ async def analyze_document(files: List[UploadFile] = File(...)):
                         else:
                             roi_img = roi_img.astype(np.uint8)
                 else:
-                    print("⚠️ PassportEye failed to find MRZ bounding box. Falling back to OpenCV 25% crop.")
+                    print("⚠️ PassportEye failed to find MRZ. Engaging Adaptive Preprocessing Fallback.")
                     img_bgr = cv2.cvtColor(first_img_array, cv2.COLOR_RGB2BGR)
                     height, width = img_bgr.shape[:2]
-                    roi_img = img_bgr[int(height * 0.75):height, 0:width]
-                    roi_img = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
-                    _, roi_img = cv2.threshold(roi_img, 150, 255, cv2.THRESH_BINARY)
+                    
+                    # Expand crop to bottom 35% in case of angled phone photos
+                    roi_img = img_bgr[int(height * 0.65):height, 0:width]
+                    roi_gray = cv2.cvtColor(roi_img, cv2.COLOR_BGR2GRAY)
+                    
+                    # 1. CLAHE Contrast Normalization for deep shadows
+                    clahe_mrz = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+                    roi_img = clahe_mrz.apply(roi_gray)
+                    
+                    # 2. Sharpening Kernel to crisp up blurry MRZ text
+                    kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+                    roi_img = cv2.filter2D(roi_img, -1, kernel)
 
                 # Resizing exactly as requested to optimize EasyOCR dimensions
                 roi_img = cv2.resize(roi_img, (1110, 140))
@@ -300,24 +313,34 @@ async def analyze_document(files: List[UploadFile] = File(...)):
                     # The system will naturally fail it later during the formal Verhoeff check
                     extracted_data["passport_number"] = raw_aadhaar_numbers[0]
                         
-                # DOB / YOB Regex
+                # DOB / YOB Regex (Highly resilient to OCR typos)
                 dob_index = -1
                 for i, line in enumerate(results):
-                    match = re.search(r'(?:DOB|Year of Birth|YOB).*?(\d{2}/\d{2}/\d{4}|\d{4})', line, re.IGNORECASE)
+                    # Clean up common OCR date typos (e.g. spaces around slashes)
+                    clean_line = line.replace(" / ", "/").replace(" - ", "-")
+                    
+                    # 1. Look for DOB keyword
+                    match = re.search(r'(?:DOB|D0B|YOB|BIRTH).*?(\d{2}[\/\-]\d{2}[\/\-]\d{4}|\d{4})', clean_line, re.IGNORECASE)
+                    
+                    # 2. Fallback: Find any standalone DD/MM/YYYY date if keyword is destroyed by blur
+                    if not match:
+                        match = re.search(r'\b(\d{2}[\/\-]\d{2}[\/\-]\d{4})\b', clean_line)
+                        
                     if match:
                         extracted_data["dob"] = match.group(1)
                         dob_index = i
                         break
                         
-                # Positional Heuristic Name Extraction (Usually directly above DOB)
+                # Positional Heuristic Name Extraction (Directly above DOB)
                 if dob_index > 0:
-                    ignore_words = ["GOVERNMENT", "INDIA", "FATHER", "MERA", "AADHAAR"]
+                    ignore_words = ["GOVERNMENT", "INDIA", "FATHER", "MERA", "AADHAAR", "AUTHORITY"]
                     for j in range(dob_index - 1, -1, -1):
                         candidate = results[j].strip().upper()
-                        # If it's mostly letters/spaces and not a generic keyword
-                        if len(candidate) > 3 and re.match(r'^[A-Z\s]+$', candidate):
+                        # Mostly letters, spaces, and dots (e.g. M. K. Gandhi)
+                        if len(candidate) > 3 and re.match(r'^[A-Z\s\.]+$', candidate):
                             if not any(w in candidate for w in ignore_words):
-                                extracted_data["full_name"] = candidate
+                                # Convert back to Title Case for UI aesthetics
+                                extracted_data["full_name"] = candidate.title()
                                 break
 
                 # Gender
