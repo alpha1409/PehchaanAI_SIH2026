@@ -4,9 +4,15 @@ import { Bell, User, ChevronDown, LogOut } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
 import Login from './pages/Login';
+import LandingLayout from './pages/LandingLayout';
 import LandingPage from './pages/LandingPage';
+import UseCasesPage from './pages/UseCasesPage';
+import ModulesPage from './pages/ModulesPage';
+import HowItWorksPage from './pages/HowItWorksPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
 
-// Creating a separate Sidebar component so we can use useLocation()
+// Sidebar component for Dashboard view
 function Sidebar() {
   const location = useLocation();
 
@@ -29,24 +35,22 @@ function Sidebar() {
       </nav>
       
       <div className="sidebar-footer">
-        SSB Police Division
+        SIH 2026 Prototype
       </div>
     </aside>
   );
 }
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return Boolean(localStorage.getItem('token'));
+  });
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef(null);
   
-  const officer = JSON.parse(localStorage.getItem('officer')) || { name: 'Border Officer', badgeNumber: 'SG-2047' };
+  const officer = JSON.parse(localStorage.getItem('officer')) || { name: 'Verification Officer', badgeNumber: 'SG-2047' };
 
   useEffect(() => {
-    if (localStorage.getItem('token')) {
-      setIsAuthenticated(true);
-    }
-    
     // Close dropdown if clicked outside
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -68,9 +72,18 @@ function App() {
     <BrowserRouter>
       {!isAuthenticated ? (
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route element={<LandingLayout />}>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/use-cases" element={<UseCasesPage />} />
+            <Route path="/modules" element={<ModulesPage />} />
+            <Route path="/how-it-works" element={<HowItWorksPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/about-us" element={<Navigate to="/about" replace />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route path="/contact-us" element={<Navigate to="/contact" replace />} />
+          </Route>
           <Route path="/login" element={<Login setAuth={setIsAuthenticated} />} />
-          <Route path="*" element={<Navigate to="/" />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       ) : (
         <div className="dashboard-layout">
@@ -106,7 +119,7 @@ function App() {
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column' }}>
                       <span style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#0f172a', lineHeight: '1.2' }}>{officer.badgeNumber || 'SG-2047'}</span>
-                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{officer.name || 'Border Officer'}</span>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>{officer.name || 'Verification Officer'}</span>
                     </div>
                     <ChevronDown size={16} color="#64748b" style={{ marginLeft: '4px' }} />
                   </div>
@@ -133,7 +146,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/history" element={<History />} />
-                <Route path="*" element={<Navigate to="/" />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
           </div>
