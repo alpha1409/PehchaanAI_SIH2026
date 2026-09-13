@@ -66,14 +66,16 @@ def perform_ela(image_bytes, quality=90):
             
         synthetic_corners = 0
         for corner in corners:
-            if np.std(corner) < 1.0:  # Threshold for impossibly flat noise (computer generated)
+            # Increased threshold from 1.0 to 4.0 to account for JPEG compression artifacts
+            if np.std(corner) < 4.0:
                 synthetic_corners += 1
                 
         digital_template_anomaly = bool(synthetic_corners >= 1)
 
         # Heuristic Region Analysis (Simulated mapping to Text/Portrait areas)
-        text_anomaly = bool(std_val > 45 and max_val > 240)
-        portrait_anomaly = bool(mean_val > 40 and std_val > 35)
+        # Lowered thresholds to make ELA more sensitive to manipulated JPEGs
+        text_anomaly = bool(std_val > 30 and max_val > 200)
+        portrait_anomaly = bool(mean_val > 25 and std_val > 25)
         
         # Calculate base tampering score (0-100)
         raw_score = (std_val * 1.5) + (mean_val * 0.5)

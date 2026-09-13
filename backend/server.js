@@ -22,9 +22,11 @@ app.use(express.json());
 // Routes
 const authRoutes = require('./src/routes/authRoutes');
 const screeningRoutes = require('./src/routes/screeningRoutes');
+const blockchainRoutes = require('./src/routes/blockchainRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/screening', screeningRoutes);
+app.use('/api/blockchain', blockchainRoutes);
 
 // Basic health check route
 app.get('/api/health', (req, res) => {

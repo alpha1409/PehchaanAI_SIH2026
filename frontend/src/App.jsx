@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import { Bell, User, ChevronDown, LogOut } from 'lucide-react';
+import { Bell, User, ChevronDown, LogOut, Home, FileClock, ShieldCheck, ChevronRight } from 'lucide-react';
 import Dashboard from './pages/Dashboard';
 import History from './pages/History';
+import BlockchainVerify from './pages/BlockchainVerify';
 import Login from './pages/Login';
 import LandingLayout from './pages/LandingLayout';
 import LandingPage from './pages/LandingPage';
@@ -11,31 +12,81 @@ import ModulesPage from './pages/ModulesPage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import logoIcon from './assets/logo.png';
 
 // Sidebar component for Dashboard view
 function Sidebar() {
   const location = useLocation();
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-header">
-        <h2>PehchaanAI</h2>
-        <div style={{ fontSize: '0.7rem', color: 'var(--sidebar-text)', marginTop: '4px' }}>AI Document Screening</div>
-      </div>
+    <aside className="sidebar" style={{ 
+      position: 'relative', 
+      overflow: 'hidden', 
+      background: 'linear-gradient(180deg, #f8fcfa 0%, #e1f7f0 100%)',
+      borderRight: '1px solid #e2e8f0'
+    }}>
       
-      <nav className="sidebar-nav">
-        <ul>
-          <Link to="/" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <li className={location.pathname === '/' ? 'active' : ''}>New Screening</li>
-          </Link>
-          <Link to="/history" style={{ textDecoration: 'none', color: 'inherit' }}>
-            <li className={location.pathname === '/history' ? 'active' : ''}>Screening History</li>
-          </Link>
-        </ul>
-      </nav>
-      
-      <div className="sidebar-footer">
-        SIH 2026 Prototype
+      {/* Decorative Wave SVG inside the sidebar */}
+      <svg viewBox="0 0 200 400" preserveAspectRatio="none" style={{ position: 'absolute', bottom: 0, left: 0, width: '100%', height: '50%', zIndex: 0, opacity: 0.5 }}>
+        <path d="M0,200 C50,150 150,250 200,100 L200,400 L0,400 Z" fill="#88f6c6" />
+      </svg>
+
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+        <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: 'none', padding: '2rem 1.5rem 1.5rem' }}>
+          <img src={logoIcon} alt="PehchaanAI Logo" style={{ width: '38px', filter: 'drop-shadow(0 0 8px rgba(16,185,129,0.2))' }} />
+          <div>
+            <h2 style={{ margin: 0, fontSize: '1.35rem', fontWeight: '800', color: '#0f172a' }}>Pehchaan<span style={{ color: '#10b981' }}>AI</span></h2>
+            <div style={{ fontSize: '0.65rem', color: '#64748b', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px', fontWeight: '600' }}>AI Document Screening</div>
+          </div>
+        </div>
+        
+        <nav className="sidebar-nav" style={{ padding: '0 1rem', marginTop: '1rem' }}>
+          <ul style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <Link to="/" style={{ textDecoration: 'none' }}>
+              <li className={location.pathname === '/' ? 'active-link' : 'inactive-link'}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <Home size={20} />
+                  <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>New Screening</span>
+                </div>
+                {location.pathname === '/' && <ChevronRight size={18} />}
+              </li>
+            </Link>
+            <Link to="/history" style={{ textDecoration: 'none' }}>
+              <li className={location.pathname === '/history' ? 'active-link' : 'inactive-link'}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <FileClock size={20} />
+                  <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>Screening History</span>
+                </div>
+                {location.pathname === '/history' && <ChevronRight size={18} />}
+              </li>
+            </Link>
+            <Link to="/blockchain" style={{ textDecoration: 'none' }}>
+              <li className={location.pathname === '/blockchain' ? 'active-link' : 'inactive-link'}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <ShieldCheck size={20} />
+                  <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>Blockchain Verify</span>
+                </div>
+                {location.pathname === '/blockchain' && <ChevronRight size={18} />}
+              </li>
+            </Link>
+          </ul>
+        </nav>
+        
+        <div className="sidebar-footer" style={{ marginTop: 'auto', borderTop: 'none', padding: '1.5rem', textAlign: 'left' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '1.5rem', backgroundColor: 'rgba(255,255,255,0.6)', padding: '12px', borderRadius: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.02)' }}>
+            <div style={{ backgroundColor: '#dcfce7', padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <ShieldCheck size={24} color="#059669" />
+            </div>
+            <div>
+              <div style={{ fontSize: '0.85rem', fontWeight: '700', color: '#0f172a' }}>PehchaanAI v1.0</div>
+              <div style={{ fontSize: '0.65rem', color: '#64748b' }}>Securing Identities, Enabling Trust</div>
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '4px' }}>
+            <div style={{ width: '12px', height: '2px', backgroundColor: '#10b981' }}></div>
+            <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: '700', letterSpacing: '0.5px' }}>A SAFER INDIA INITIATIVE</div>
+          </div>
+        </div>
       </div>
     </aside>
   );
@@ -91,7 +142,7 @@ function App() {
 
           {/* Main Content Area */}
           <div className="main-area">
-            <header className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#ffffff', padding: '1rem 2.5rem', borderBottom: '1px solid #e2e8f0' }}>
+            <header className="topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#c1f9d8', padding: '1rem 2.5rem', borderBottom: '1px solid #e2e8f0', borderRadius: '0 0 12px 12px', boxShadow: '0 4px 6px rgba(0, 0, 0, 0.05)' }}>
               
               {/* Left Side: Title & Case ID */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
@@ -103,7 +154,7 @@ function App() {
 
               {/* Right Side: Actions & Profile */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }} ref={dropdownRef}>
-                <Bell size={20} color="#64748b" style={{ cursor: 'pointer' }} />
+                <Bell size={20} color="#11151a" style={{ cursor: 'pointer' }} />
                 
                 {/* Vertical Divider */}
                 <div style={{ width: '1px', height: '32px', backgroundColor: '#e2e8f0' }}></div>
@@ -146,6 +197,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/history" element={<History />} />
+                <Route path="/blockchain" element={<BlockchainVerify />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>

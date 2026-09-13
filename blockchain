@@ -1,0 +1,191 @@
+# Implementation Plan - PehchaanAI Blockchain Verification Module
+
+Implement an end-to-end, tamper-evident Blockchain Verification module for PehchaanAI following the completed Verification Result flow:
+```
+Verification Result
+→ Generate Verification Record
+→ Generate SHA-256 Hash
+→ Store verification hash on blockchain (or record as Pending/Config Required if RPC offline)
+→ Receive Transaction/Block ID
+→ Verify hash integrity
+→ Display Blockchain Verification Status
+→ Maintain immutable audit trail
+```
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Strict Security & Zero Fake Blockchain Data Policy:**
+> 1. **No PII On-Chain**: In strict compliance with privacy standards, Aadhaar/Passport/PAN numbers, raw photos, biometric images, or sensitive personal data will **never** be stored on the blockchain. Only deterministic SHA-256 hashes and minimal non-sensitive metadata (`documentId` reference, `documentType`, `verificationStatus`, `riskScore`, `timestamp`) will be anchored.
+> 2. **No Fake Transactions**: In accordance with Requirement 11 & 21, if no live Ethereum/EVM RPC node or testnet is configured, the system will explicitly report **`Not Connected`** / **`Configuration Required`** and set `txHash: null` / `blockNumber: null`. It will never generate counterfeit tx hashes or claim simulated blocks are mined on a real blockchain.
+> 3. **Live EVM Ready**: A clean abstraction service with environment variables (`BLOCKCHAIN_PROVIDER_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS`, `BLOCKCHAIN_PRIVATE_KEY`, `BLOCKCHAIN_NETWORK_NAME`) and a production-ready Solidity registry contract (`DocumentVerificationRegistry.sol`) will be provided so any EVM chain (Sepolia, Hardhat, Ganache, Polygon) can be connected at any time.
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    subgraph Frontend ["Frontend (React + Lucide + Tailwind)"]
+        UI_Scan["Screening Results (Dashboard.jsx)"]
+        UI_Anchor["'Anchor on Blockchain' Action"]
+        UI_BCDash["Blockchain Verify Dashboard (/blockchain)"]
+        UI_Lookup["Document ID Integrity Search"]
+        UI_Detail["Detailed Record Drawer & Live Audit Trail"]
+    end
+
+    subgraph NodeBackend ["Node.js / Express Proxy (Port 5000)"]
+        Routes_BC["/api/blockchain Routes"]
+        Model_BC["BlockchainRecord Model (MongoDB seemaprahari)"]
+        Auth_MW["Officer Auth Middleware"]
+    end
+
+    subgraph PythonAI ["Python AI Core (Port 8000)"]
+        PY_BCService["blockchain_service.py (Abstraction Layer)"]
+        PY_HashEngine["SHA-256 Canonical Hashing Engine"]
+        PY_EVMClient["Ethereum JSON-RPC Client / EVM Adapter"]
+    end
+
+    subgraph Blockchain ["Ethereum / EVM Blockchain (Optional / Configurable)"]
+        EVM_Node["Sepolia / Ganache / Hardhat / Polygon RPC"]
+        SmartContract["DocumentVerificationRegistry.sol"]
+    end
+
+    UI_Scan --> UI_Anchor
+    UI_Anchor -->|POST /api/blockchain/record| Routes_BC
+    UI_BCDash -->|GET /api/blockchain/status & records| Routes_BC
+    UI_Lookup -->|POST /api/blockchain/verify-integrity| Routes_BC
+
+    Routes_BC --> Model_BC
+    Routes_BC -->|Internal Proxy| PY_BCService
+    PY_BCService --> PY_HashEngine
+    PY_BCService -.->|If Configured| EVM_Node
+    EVM_Node -.-> SmartContract
+```
+
+---
+
+## Proposed Changes
+
+### 1. Python AI Backend (`python_ai/`)
+
+#### [NEW] [`blockchain_service.py`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/python_ai/blockchain_service.py)
+- **Deterministic SHA-256 Hashing**:
+  - Takes non-sensitive fields: `(document_id, document_type, verification_status, risk_score, timestamp)`.
+  - Builds canonical payload string `f"{document_id}|{document_type}|{verification_status}|{risk_score}|{timestamp}"`.
+  - Produces standard 256-bit hexadecimal digest (`hashlib.sha256`).
+- **Blockchain Abstraction Engine**:
+  - Reads `BLOCKCHAIN_PROVIDER_URL`, `BLOCKCHAIN_CONTRACT_ADDRESS`, `BLOCKCHAIN_PRIVATE_KEY`, `BLOCKCHAIN_NETWORK_NAME`, `BLOCKCHAIN_CHAIN_ID`.
+  - `get_network_status()`: Tests connection via JSON-RPC (`eth_blockNumber`, `eth_chainId`). Returns real status, network name, chain ID, and latest block. If offline or not configured, cleanly reports `Configuration Required` / `Not Connected`.
+  - `anchor_hash(document_id, record_hash, status, risk_score)`: If connected, submits transaction to registry contract. If not connected, returns `{ "anchored": false, "status": "Configuration Required", "tx_hash": None, "block_number": None }`.
+  - `verify_hash_integrity(record_data, expected_hash)`: Deterministically recalculates the SHA-256 hash, compares it with `expected_hash` (and on-chain hash if connected), returning exact comparison breakdown (`"Hash Verified"` vs `"Integrity Check Failed"`).
+
+#### [MODIFY] [`main.py`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/python_ai/main.py)
+- Add FastAPI endpoints:
+  - `GET /blockchain/status`: Returns current blockchain connectivity, network name, latest block.
+  - `POST /blockchain/generate-record`: Receives non-sensitive metadata, computes canonical SHA-256, attempts blockchain anchor.
+  - `POST /blockchain/verify-hash`: Recalculates hash and returns integrity status.
+
+---
+
+### 2. Node.js Backend (`backend/`)
+
+#### [NEW] [`backend/src/models/BlockchainRecord.js`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/backend/src/models/BlockchainRecord.js)
+- Mongoose schema for persistent blockchain verification records in MongoDB:
+  - `caseId`: String (references Case ID)
+  - `documentId`: String (indexed)
+  - `documentType`: String (Aadhaar, Passport, Visa, etc.)
+  - `verificationStatus`: String ('Verified', 'Suspicious', 'Rejected', 'Cleared', 'Flagged')
+  - `riskScore`: Number
+  - `timestamp`: Date
+  - `recordHash`: String (SHA-256 digest)
+  - `canonicalPayload`: String (transparent proof string)
+  - `blockchainStatus`: String ('Verified', 'Pending', 'Failed', 'Configuration Required')
+  - `txHash`: String (null if not anchored)
+  - `blockNumber`: Number (null if not anchored)
+  - `networkName`: String
+  - `officerBadge`: String
+  - `auditTrail`: Array of events:
+    - `{ action, timestamp, details, performedBy }`
+
+#### [NEW] [`backend/src/routes/blockchainRoutes.js`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/backend/src/routes/blockchainRoutes.js)
+- Express router mounted at `/api/blockchain`:
+  - `GET /status`: Combines Python RPC connection status + MongoDB metrics (total records, verified records, latest block).
+  - `POST /record`: Accepts verification result, calls Python service for SHA-256 and anchoring, saves to MongoDB with initial audit log entry.
+  - `GET /records`: Returns list of records with optional filter/search.
+  - `GET /record/:documentId`: Fetches a single record by document ID or case ID.
+  - `POST /verify-integrity`: Recalculates hash, verifies integrity against MongoDB/blockchain, appends audit log entry (`INTEGRITY_VERIFIED` or `INTEGRITY_FAILED`).
+
+#### [MODIFY] [`backend/server.js`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/backend/server.js)
+- Mount `/api/blockchain` routes.
+
+#### [NEW] [`backend/contracts/DocumentVerificationRegistry.sol`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/backend/contracts/DocumentVerificationRegistry.sol)
+- Production-grade Solidity smart contract for EVM deployment containing:
+  - `recordVerification(bytes32 docHash, bytes32 recordHash, string docType, uint8 riskScore)`
+  - `getVerification(bytes32 docHash)`
+  - Event `VerificationAnchored(bytes32 indexed docHash, bytes32 indexed recordHash, address officer, uint256 timestamp)`.
+
+---
+
+### 3. Frontend UI (`frontend/`)
+
+#### [NEW] [`frontend/src/pages/BlockchainVerify.jsx`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/frontend/src/pages/BlockchainVerify.jsx)
+- **Top Stats Cards (4 KPI widgets)**:
+  1. Connection Status (Connected / Configuration Required) with network name.
+  2. Total Verification Records logged.
+  3. Verified Records.
+  4. Latest Block / Anchored Transaction.
+- **Document ID Search & Fast Integrity Verifier**:
+  - Search input for Document ID / Case ID.
+  - "Verify Record" button: triggers instant hash recalculation & integrity comparison.
+  - Real-time notification banner:
+    - "Hash Verified" (green banner with ShieldCheck icon)
+    - "Integrity Check Failed" (red banner with AlertTriangle icon)
+    - "Record Not Found" (amber banner)
+- **Blockchain Records Table**:
+  - Responsive table showing Document ID, Type, Status, Risk Score, SHA-256 Hash (with copy button), Transaction ID, Block Number, Timestamp, Blockchain Status badge.
+  - Search and filter controls.
+  - Loading, empty, and error states.
+- **Detailed Record Drawer / Modal**:
+  - Opens on row click.
+  - Full 64-character SHA-256 hash with copy action.
+  - Canonical payload breakdown (transparency).
+  - Transaction ID and Block Number details.
+  - **Live "Recalculate & Verify Hash" interactive button** with visual comparison of Stored Hash vs Recomputed Hash.
+  - **Immutable Audit Trail Timeline**: Visual chronology of actions taken (Record Generated, Hashed, Anchored, Verified).
+
+#### [MODIFY] [`frontend/src/pages/Dashboard.jsx`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/frontend/src/pages/Dashboard.jsx)
+- Seamlessly integrate with the existing Verification Result flow without altering or disturbing any previous modules:
+  - Once AI screening results are returned, display a **"Blockchain Verification Anchor"** card in the result view.
+  - Displays: Document ID, Verification Status, Risk Score, Generated SHA-256 Hash, and Status badge.
+  - Interactive "Anchor on Blockchain" button (calls `POST /api/blockchain/record` and transitions state to anchored/logged).
+  - Direct "Inspect in Blockchain Registry" link that takes the officer directly to `/blockchain`.
+
+#### [MODIFY] [`frontend/src/App.jsx`](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/frontend/src/App.jsx)
+- Update Sidebar navigation to include **"Blockchain Verify"** (`/blockchain`) with icon.
+- Add route `<Route path="/blockchain" element={<BlockchainVerify />} />`.
+
+---
+
+## Verification Plan
+
+### Automated / API Verification:
+1. **Python AI Health & Blockchain Endpoints**:
+   - Verify Python service starts and `GET http://127.0.0.1:8000/blockchain/status` returns valid JSON with `Configuration Required` / `Not Connected` (or connected if test node is active).
+   - Test `POST http://127.0.0.1:8000/blockchain/generate-record` produces valid 64-character SHA-256 hex string.
+2. **Node.js Express Blockchain Endpoints**:
+   - Test `GET http://localhost:5000/api/blockchain/status`.
+   - Test `POST http://localhost:5000/api/blockchain/record` creates and stores a record in MongoDB.
+   - Test `POST http://localhost:5000/api/blockchain/verify-integrity` recalculates and returns `"Hash Verified"`.
+   - Test with modified payload to confirm `"Integrity Check Failed"` triggers accurately.
+
+### End-to-End Frontend Flow Verification:
+1. Navigate to `/` (New Screening) → Upload document → Start AI Screening.
+2. Observe completed Verification Result → Review generated SHA-256 hash in the Blockchain Anchor card.
+3. Click "Anchor on Blockchain" → Confirm record is stored and status updates.
+4. Navigate to `/blockchain` via Sidebar → Verify record appears in Blockchain Record Table.
+5. Test Document ID search and click "Verify Record" → Verify "Hash Verified" banner displays.
+6. Click row to open Detailed View → Run live integrity recalculation and view the complete immutable audit trail.
+7. Confirm mobile/responsive layout and no horizontal overflow.

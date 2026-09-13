@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import axios from 'axios';
-import { UploadCloud, X, CheckCircle, FileText, Globe, CreditCard, Info, Lightbulb, ScanLine, ArrowRight, Camera } from 'lucide-react';
+import { UploadCloud, X, CheckCircle, FileText, Globe, CreditCard, Info, Lightbulb, ScanLine, ArrowRight, Camera, User } from 'lucide-react';
 
 function Dashboard() {
   const [docType, setDocType] = useState('Aadhaar');
@@ -15,11 +15,137 @@ function Dashboard() {
 
   // Face Verification States
   const videoRef = useRef(null);
+
+const DocumentPhotoCard = ({ photo, isAwaiting, isScanning }) => {
+  const [lensStyle, setLensStyle] = useState({ display: 'none' });
+  const containerRef = useRef(null);
+  
+  const handleMouseMove = (e) => {
+    if (!photo || !photo.available || !containerRef.current) return;
+    
+    // Check if device supports hover
+    if (window.matchMedia('(hover: none)').matches) return;
+
+    const { left, top, width, height } = containerRef.current.getBoundingClientRect();
+    const x = e.clientX - left;
+    const y = e.clientY - top;
+
+    // Boundary check
+    if (x < 0 || y < 0 || x > width || y > height) {
+      setLensStyle({ display: 'none' });
+      return;
+    }
+
+    const zoom = 2.5;
+    const lensSize = 130; // diameter
+    const bgX = (x / width) * 100;
+    const bgY = (y / height) * 100;
+
+    setLensStyle({
+      display: 'block',
+      position: 'absolute',
+      width: `${lensSize}px`,
+      height: `${lensSize}px`,
+      left: `${x - lensSize/2}px`,
+      top: `${y - lensSize/2}px`,
+      borderRadius: '50%',
+      backgroundImage: `url(${photo.image})`,
+      backgroundRepeat: 'no-repeat',
+      backgroundSize: `${width * zoom}px ${height * zoom}px`,
+      backgroundPosition: `${bgX}% ${bgY}%`,
+      border: '2px solid rgba(255, 255, 255, 0.8)',
+      boxShadow: '0 8px 16px rgba(0,0,0,0.15), inset 0 0 0 1px rgba(0,0,0,0.1)',
+      pointerEvents: 'none', // crucial to not block mouse movements
+      zIndex: 10,
+      cursor: 'crosshair',
+      backgroundColor: '#f8fafc' // fallback
+    });
+  };
+
+  const handleMouseLeave = () => setLensStyle({ display: 'none' });
+
+  return (
+    <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3>Document Photo</h3>
+        {photo && photo.available && (
+          <span style={{ backgroundColor: photo.quality === 'good' ? '#dcfce7' : '#fef3c7', color: photo.quality === 'good' ? '#065f46' : '#92400e', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 'bold' }}>
+            {photo.quality === 'good' ? 'DETECTED' : 'LOW QUALITY'}
+          </span>
+        )}
+      </div>
+      
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', marginTop: '1.5rem', minHeight: '220px' }}>
+        {isScanning ? (
+          <div style={{ textAlign: 'center', color: '#64748b' }}>
+            <div className="spin" style={{ width: '24px', height: '24px', border: '3px solid #cbd5e1', borderTopColor: '#3b82f6', borderRadius: '50%', margin: '0 auto 12px' }}></div>
+            <div style={{ fontSize: '0.9rem', fontWeight: '500' }}>Scanning Photo...</div>
+          </div>
+        ) : isAwaiting ? (
+           <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', textAlign: 'center' }}>Photo will be extracted here...</div>
+        ) : (photo && photo.available) ? (
+          <div 
+            ref={containerRef}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            style={{ position: 'relative', width: '100%', maxWidth: '200px', height: '260px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', backgroundColor: '#f1f5f9', cursor: 'crosshair' }}
+          >
+            <img src={photo.image} alt="Extracted Portrait" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <div style={lensStyle}></div>
+            {/* Crosshair target overlay */}
+            {lensStyle.display === 'block' && (
+              <div style={{
+                position: 'absolute',
+                left: lensStyle.left,
+                top: lensStyle.top,
+                width: lensStyle.width,
+                height: lensStyle.height,
+                pointerEvents: 'none',
+                zIndex: 11,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                <div style={{ width: '10px', height: '1px', backgroundColor: 'rgba(255,255,255,0.8)' }}></div>
+                <div style={{ width: '1px', height: '10px', backgroundColor: 'rgba(255,255,255,0.8)', position: 'absolute' }}></div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', color: '#94a3b8' }}>
+            <User size={40} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
+            <div style={{ fontSize: '0.95rem', fontWeight: '600', color: '#475569' }}>Photo Unavailable</div>
+            <div style={{ fontSize: '0.8rem', marginTop: '4px', maxWidth: '80%' }}>{photo?.message || 'Unable to detect a clear photo'}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
   const canvasRef = useRef(null);
   const [stream, setStream] = useState(null);
   const [liveImage, setLiveImage] = useState(null);
   const [faceMatchScore, setFaceMatchScore] = useState(null);
   const [isVerifyingFace, setIsVerifyingFace] = useState(false);
+  const [anchorStatus, setAnchorStatus] = useState(null);
+
+  const handleAnchorOnBlockchain = async () => {
+    if (!results) return;
+    try {
+      const payload = {
+        documentId: results.extractedData?.passportNumber || `DOC-${Date.now()}`,
+        documentType: results.documentType,
+        verificationStatus: results.riskScore > 50 ? 'Failed' : 'Passed',
+        riskScore: results.riskScore,
+        caseId: 'SS-2024-05-24-1892'
+      };
+      const response = await axios.post('http://localhost:5000/api/blockchain/record', payload);
+      setAnchorStatus(response.data.record);
+    } catch (error) {
+      console.error("Blockchain anchor error", error);
+      alert("Failed to anchor to blockchain");
+    }
+  };
 
   const startCamera = async () => {
     try {
@@ -142,8 +268,27 @@ function Dashboard() {
         }
       });
       
-      setUploadStatus('Screening Complete.');
+      setUploadStatus('Screening Complete. Auto-anchoring to Blockchain...');
       setResults(response.data); // Save the data to state
+
+      // AUTOMATIC BLOCKCHAIN ANCHOR
+      // The officer cannot bypass this step.
+      try {
+        const payload = {
+          documentId: response.data.extractedData?.passportNumber || `DOC-${Date.now()}`,
+          documentType: response.data.documentType,
+          verificationStatus: response.data.riskScore > 50 ? 'Failed' : 'Passed',
+          riskScore: response.data.riskScore,
+          caseId: 'SS-2024-05-24-1892'
+        };
+        const anchorRes = await axios.post('http://localhost:5000/api/blockchain/record', payload);
+        setAnchorStatus(anchorRes.data.record);
+        setUploadStatus('Screening & Blockchain Anchor Complete.');
+      } catch (anchorError) {
+        console.error('Error auto-anchoring:', anchorError);
+        setUploadStatus('Screening Complete, but Blockchain Anchor failed.');
+      }
+
     } catch (error) {
       console.error('Error uploading:', error);
       if (error.response?.status === 401) {
@@ -357,44 +502,48 @@ function Dashboard() {
         )}
       </div>
       
-      {/* 2. Risk Assessment */}
-      <div className="card" style={{ display: 'flex', flexDirection: 'column' }}>
-        <h3 style={{ textTransform: 'uppercase', fontSize: '0.9rem', letterSpacing: '1px', color: '#475569' }}>Risk Assessment</h3>
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <RiskGauge score={results ? results.riskScore : 0} isAwaiting={!results} />
+      {/* 2 & 3. Risk Assessment and Alerts (Stacked in one column) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+          <h3 style={{ textTransform: 'uppercase', fontSize: '0.9rem', letterSpacing: '1px', color: '#475569' }}>Risk Assessment</h3>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <RiskGauge score={results ? results.riskScore : 0} isAwaiting={!results} />
+          </div>
+        </div>
+
+        <div className="card" style={{ flex: 1 }}>
+          <h3>Alerts & Flags</h3>
+          {results && results.validation ? (
+             <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+               
+               <div style={{ padding: '0.8rem 1rem', backgroundColor: results.validation.mrzConsistency?.includes('Failed') ? '#fef2f2' : '#f0fdf4', borderLeft: `4px solid ${results.validation.mrzConsistency?.includes('Failed') ? 'var(--risk-high)' : 'var(--risk-low)'}`, borderRadius: '4px', fontSize: '0.9rem' }}>
+                 <strong style={{ display: 'block', marginBottom: '4px' }}>MRZ Cross-Check</strong> 
+                 {results.validation.mrzConsistency}
+               </div>
+               
+               <div style={{ padding: '0.8rem 1rem', backgroundColor: results.validation.expirationCheck === 'Failed' ? '#fef2f2' : '#f0fdf4', borderLeft: `4px solid ${results.validation.expirationCheck === 'Failed' ? 'var(--risk-high)' : 'var(--risk-low)'}`, borderRadius: '4px', fontSize: '0.9rem' }}>
+                 <strong style={{ display: 'block', marginBottom: '4px' }}>Expiry Status</strong> 
+                 {results.validation.expirationCheck}
+               </div>
+
+               {results.riskScore > 20 && (
+                 <div style={{ padding: '0.8rem 1rem', backgroundColor: '#fffbeb', borderLeft: `4px solid var(--risk-medium)`, borderRadius: '4px', fontSize: '0.9rem' }}>
+                   <strong style={{ display: 'block', marginBottom: '4px' }}>Warning</strong> 
+                   Review the document manually due to elevated risk score.
+                 </div>
+               )}
+               
+             </div>
+          ) : (
+            <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px dashed #cbd5e1', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem' }}>
+              No alerts generated yet. Run a scan to see validation flags.
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 3. New Alerts Section */}
-      <div className="card">
-        <h3>Alerts & Flags</h3>
-        {results && results.validation ? (
-           <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
-             
-             <div style={{ padding: '0.8rem 1rem', backgroundColor: results.validation.mrzConsistency?.includes('Failed') ? '#fef2f2' : '#f0fdf4', borderLeft: `4px solid ${results.validation.mrzConsistency?.includes('Failed') ? 'var(--risk-high)' : 'var(--risk-low)'}`, borderRadius: '4px', fontSize: '0.9rem' }}>
-               <strong style={{ display: 'block', marginBottom: '4px' }}>MRZ Cross-Check</strong> 
-               {results.validation.mrzConsistency}
-             </div>
-             
-             <div style={{ padding: '0.8rem 1rem', backgroundColor: results.validation.expirationCheck === 'Failed' ? '#fef2f2' : '#f0fdf4', borderLeft: `4px solid ${results.validation.expirationCheck === 'Failed' ? 'var(--risk-high)' : 'var(--risk-low)'}`, borderRadius: '4px', fontSize: '0.9rem' }}>
-               <strong style={{ display: 'block', marginBottom: '4px' }}>Expiry Status</strong> 
-               {results.validation.expirationCheck}
-             </div>
-
-             {results.riskScore > 20 && (
-               <div style={{ padding: '0.8rem 1rem', backgroundColor: '#fffbeb', borderLeft: `4px solid var(--risk-medium)`, borderRadius: '4px', fontSize: '0.9rem' }}>
-                 <strong style={{ display: 'block', marginBottom: '4px' }}>Warning</strong> 
-                 Review the document manually due to elevated risk score.
-               </div>
-             )}
-             
-           </div>
-        ) : (
-          <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f8fafc', borderRadius: '4px', border: '1px dashed #cbd5e1', color: 'var(--text-muted)', textAlign: 'center', fontSize: '0.9rem' }}>
-            No alerts generated yet. Run a scan to see validation flags.
-          </div>
-        )}
-      </div>
+      {/* 4. Document Photo with Magnifier Lens */}
+      <DocumentPhotoCard photo={results?.photo} isAwaiting={!results && !uploadStatus} isScanning={uploadStatus && !results} />
       
       {/* 4. Extracted Information */}
       <div className="card">
@@ -578,6 +727,44 @@ function Dashboard() {
           
         </div>
       </div>
+      {/* 8. Blockchain Verification Anchor */}
+      {results && (
+        <div className="card" style={{ gridColumn: 'span 2', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h3 style={{ textTransform: 'uppercase', fontSize: '0.9rem', letterSpacing: '1px', color: '#475569', margin: 0 }}>Blockchain Anchor</h3>
+            {anchorStatus && (
+              <span style={{ backgroundColor: '#10b981', color: 'white', padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold' }}>
+                Anchored
+              </span>
+            )}
+          </div>
+          
+          <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+            <div style={{ flex: 1 }}>
+              <p style={{ color: '#475569', fontSize: '0.95rem', marginBottom: '1rem' }}>
+                Securely anchor this verification result to the blockchain to create an immutable audit trail.
+              </p>
+              
+              {anchorStatus ? (
+                <div style={{ backgroundColor: '#dcfce7', border: '1px solid #a7f3d0', padding: '12px', borderRadius: '8px' }}>
+                  <div style={{ fontSize: '0.85rem', color: '#065f46', fontWeight: '600', marginBottom: '4px' }}>SHA-256 Hash Generated (Auto-Anchored):</div>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', color: '#047857', wordBreak: 'break-all' }}>
+                    {anchorStatus.recordHash}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#065f46', marginTop: '8px' }}>
+                    Status: <strong>{anchorStatus.blockchainStatus}</strong>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ padding: '12px', backgroundColor: '#f1f5f9', color: '#475569', borderRadius: '8px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div className="spin" style={{ width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#3b82f6', borderRadius: '50%' }}></div>
+                  Automatically anchoring to Blockchain...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

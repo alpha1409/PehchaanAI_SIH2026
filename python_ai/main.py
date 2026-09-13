@@ -8,6 +8,67 @@ from typing import List
 from mrz.checker.td3 import TD3CodeChecker
 from forensics import run_tampering_engine
 import re
+import base64
+
+def extract_document_photo(img_array):
+    model_path = "models/face_detection_yunet_2023mar.onnx"
+    try:
+        detector = cv2.FaceDetectorYN.create(model_path, "", (320, 320), 0.8, 0.3, 5000)
+    except Exception as e:
+        print("YuNet initialization failed:", e)
+        return {"available": False, "image": None, "quality": "unavailable", "message": "Face detection model not found."}
+
+    img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+
+    for angle in [0, 90, 180, 270]:
+        if angle == 90:
+            rotated = cv2.rotate(img_bgr, cv2.ROTATE_90_CLOCKWISE)
+        elif angle == 180:
+            rotated = cv2.rotate(img_bgr, cv2.ROTATE_180)
+        elif angle == 270:
+            rotated = cv2.rotate(img_bgr, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        else:
+            rotated = img_bgr.copy()
+
+        h_r, w_r = rotated.shape[:2]
+        detector.setInputSize((w_r, h_r))
+        _, faces = detector.detect(rotated)
+
+        if faces is not None and len(faces) > 0:
+            face = max(faces, key=lambda f: f[2] * f[3])
+            x, y, fw, fh = [int(v) for v in face[:4]]
+            
+            margin_w = int(fw * 0.25)
+            margin_h = int(fh * 0.3)
+            x1 = max(0, x - margin_w)
+            y1 = max(0, y - int(margin_h * 1.5))
+            x2 = min(w_r, x + fw + margin_w)
+            y2 = min(h_r, y + fh + margin_h)
+            
+            cropped = rotated[y1:y2, x1:x2]
+            
+            gray_crop = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+            variance = cv2.Laplacian(gray_crop, cv2.CV_64F).var()
+            quality = "good" if variance >= 30 else "low"
+            msg = "Photo Detected" if variance >= 30 else "Photo Detected — Low Quality"
+            
+            _, buffer = cv2.imencode('.jpg', cropped)
+            b64_str = base64.b64encode(buffer).decode('utf-8')
+            
+            return {
+                "available": True,
+                "image": f"data:image/jpeg;base64,{b64_str}",
+                "quality": quality,
+                "message": msg
+            }
+
+    return {
+        "available": False,
+        "image": None,
+        "quality": "unavailable",
+        "message": "Unable to scan or detect a clear photo from the document."
+    }
+
 
 try:
     from PIL import Image
@@ -84,6 +145,42 @@ def classify_document(ocr_results):
         return "VISA"
         
     return "UNKNOWN"
+
+from pydantic import BaseModel
+from blockchain_service import get_network_status, anchor_hash, verify_hash_integrity, calculate_sha256, generate_canonical_payload
+
+class BlockchainRecordReq(BaseModel):
+    document_id: str
+    document_type: str
+    verification_status: str
+    risk_score: int
+    timestamp: str
+
+class VerifyHashReq(BaseModel):
+    record_data: dict
+    expected_hash: str
+
+@app.get("/blockchain/status")
+def blockchain_status():
+    return get_network_status()
+
+@app.post("/blockchain/generate-record")
+def generate_blockchain_record(req: BlockchainRecordReq):
+    payload = generate_canonical_payload(
+        req.document_id, req.document_type, req.verification_status, req.risk_score, req.timestamp
+    )
+    record_hash = calculate_sha256(payload)
+    anchor_result = anchor_hash(req.document_id, record_hash, req.verification_status, req.risk_score)
+    
+    return {
+        "hash": record_hash,
+        "payload": payload,
+        "anchor_result": anchor_result
+    }
+
+@app.post("/blockchain/verify-hash")
+def verify_hash(req: VerifyHashReq):
+    return verify_hash_integrity(req.record_data, req.expected_hash)
 
 @app.post("/analyze-document")
 async def analyze_document(files: List[UploadFile] = File(...)):
@@ -221,15 +318,21 @@ async def analyze_document(files: List[UploadFile] = File(...)):
                         "expiry_date": parse_mrz_date(clean(b[21:27]), is_dob=False)
                     }
                     
+                    # Check DOB Year Match
+                    # The MRZ contains a 6-digit DOB which parse_mrz_date formats to YYYY-MM-DD.
+                    # We extract the YYYY and check if it exists anywhere in the visual text.
+                    mrz_dob_year = parse_mrz_date(clean(b[13:19]), is_dob=True).split('-')[0]
+                    is_dob_match = mrz_dob_year in viz_corpus
+
                     # Enforce the Forgery Rule
-                    if is_surname_match and is_passport_match:
+                    if is_surname_match and is_passport_match and is_dob_match:
                         validation_status = "Passed (VIZ Matches MRZ)"
                         risk_score = 0
                         print("✅ VIZ Cross-Validation Passed! Data is authentic.")
                     else:
                         validation_status = "Failed (Forgery Risk: VIZ/MRZ Mismatch)"
                         risk_score = 100
-                        print(f"🚨 FORGERY DETECTED: Surname ({is_surname_match}) or Passport Number ({is_passport_match}) missing from Visual Zone!")
+                        print(f"🚨 FORGERY DETECTED: Surname ({is_surname_match}), Passport Num ({is_passport_match}), or DOB Year ({is_dob_match}) mismatch in Visual Zone!")
                         
                 else:
                     print(f"❌ Not enough MRZ lines found by EasyOCR. Got {len(code)} lines.")
@@ -412,6 +515,9 @@ async def analyze_document(files: List[UploadFile] = File(...)):
     if tampering_data["tamperingScore"] > risk_score:
         risk_score = tampering_data["tamperingScore"]
 
+    # Extract portrait photo
+    photo_data = extract_document_photo(first_img_array) if first_img_array is not None else {"available": False, "image": None, "quality": "unavailable", "message": "Failed to read image array"}
+
     return {
         "validation": {
             "mrz_consistency": validation_status,
@@ -420,7 +526,8 @@ async def analyze_document(files: List[UploadFile] = File(...)):
         "risk_score": risk_score,
         "document_type": document_type,
         "extracted_data": extracted_data,
-        "tampering_data": tampering_data
+        "tampering_data": tampering_data,
+        "photo": photo_data
     }
 
 if __name__ == "__main__":

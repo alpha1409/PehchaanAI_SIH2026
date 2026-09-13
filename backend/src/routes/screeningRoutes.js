@@ -72,7 +72,8 @@ router.post('/upload', auth, upload.array('documentImage', 2), async (req, res) 
       riskScore: finalRiskScore,
       validation: newCase.validation,
       caseId: newCase.caseId,
-      tampering_data: aiData.tampering_data
+      tampering_data: aiData.tampering_data,
+      photo: aiData.photo || { available: false, image: null, quality: 'unavailable', message: 'Not processed' }
     });
 
   } catch (error) {

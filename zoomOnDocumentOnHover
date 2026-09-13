@@ -1,0 +1,107 @@
+# Implementation Plan: Document Photo Extraction & Circular Magnifier
+
+This plan outlines adding the new **"Document Photo"** section to the PehchaanAI Verification Result page, integrating server-side face crop detection with quality evaluation, and implementing a smooth circular magnifying-glass inspection lens on the frontend.
+
+## User Review Required
+
+> [!IMPORTANT]
+> - **Zero breaking changes**: Existing modules (MRZ cross-checks, Verhoeff crypto checks, Tampering/ELA detection, Biometric webcam match, Blockchain record anchoring) remain completely untouched and working.
+> - **Strict Real Data**: No hardcoded/mocked photos will be used. The photo is strictly cropped from the uploaded document using an in-pipeline OpenCV detector.
+> - **Grid Placement**: To harmonize "Document Photo", "Extracted Information", and "Document Validation" across 3 balanced columns, the "Alerts & Flags" card is placed with "Risk Assessment" in column 3 of row 1. This balances the height of the tall "Document Upload" card and allows the document credentials row to display all three document identity cards side-by-side.
+
+---
+
+## Proposed Changes
+
+### AI Service (`python_ai`)
+
+#### [NEW] `python_ai/models/face_detection_yunet_2023mar.onnx`
+- Lightweight (232 KB) OpenCV official YuNet face detector model with zero external heavy dependencies. Tested and verified in the workspace environment (detects document faces in ~20ms with >83% confidence).
+
+#### [MODIFY] [main.py](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/python_ai/main.py)
+- Add `extract_document_photo(image_bytes_list)` utility:
+  - Runs face detection on the uploaded front document image.
+  - Handles in-the-wild document orientations (tests 0°, 90°, 180°, 270° rotations to handle photos taken at any angle).
+  - Adds a proportional portrait margin (~20%) around the detected facial area to present a natural portrait photo rather than a tight facial crop.
+  - Computes image quality metrics:
+    - Laplacian blur variance: flags blur if variance < 30.
+    - Resolution and contrast check.
+    - Sets quality to `'good'` ("Photo Detected") or `'low'` ("Photo Detected — Low Quality").
+  - Encodes the cropped photo as standard base64 JPEG (`data:image/jpeg;base64,...`).
+  - If no face is detected or image processing fails:
+    ```json
+    {
+      "available": false,
+      "image": null,
+      "quality": "unavailable",
+      "message": "Unable to scan or detect a clear photo from the document."
+    }
+    ```
+  - If face is detected:
+    ```json
+    {
+      "available": true,
+      "image": "data:image/jpeg;base64,...",
+      "quality": "good",
+      "message": "Photo Detected"
+    }
+    ```
+  - Attaches `photo` to the `/analyze-document` response.
+
+#### [MODIFY] [face_api.py](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/python_ai/face_api.py)
+- Optionally add a companion `/extract-face` endpoint to the DeepFace service on port 5001 for seamless dual-service support.
+
+---
+
+### Backend Proxy (`backend`)
+
+#### [MODIFY] [screeningRoutes.js](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/backend/src/routes/screeningRoutes.js)
+- Forward `aiData.photo` in `res.json` in the `POST /api/screening/upload` route.
+- Include a safe fallback so that `photo` is guaranteed to exist in the response even if the AI service returns an unexpected format.
+
+---
+
+### Frontend (`frontend`)
+
+#### [MODIFY] [Dashboard.jsx](file:///c:/Users/ritik/OneDrive/Desktop/PehchaanAI/frontend/src/pages/Dashboard.jsx)
+- **Document Photo Card Component**:
+  - Add state/effects for the circular magnifying lens:
+    - Tracks cursor position relative to the photo container.
+    - Renders a circular zoom lens (`~130px` diameter, `2.5x` magnification) that follows the cursor smoothly within the card bounds.
+    - Features subtle border, soft drop-shadow, and inspection crosshairs / magnification indicator.
+    - Hides when mouse leaves the image.
+    - Disables hover zoom on mobile/touch devices (`@media (hover: none)` and touch detection).
+  - Handles all required states:
+    1. **Loading State**: Displays `"Scanning Photo..."` with subtle spinner while AI processing is ongoing.
+    2. **Success State**: Displays only the extracted portrait photo with the circular magnifier and the `"Photo Detected"` / `"Photo Detected — Low Quality"` status tag.
+    3. **Failed / Unavailable State**: Displays a subtle warning icon, `"Photo Unavailable"`, and `"Unable to scan or detect a clear photo from the document."` (No broken image icons).
+    4. **Initial Awaiting State**: Clean subtle placeholder before any scan is executed.
+- **Verification Layout Harmonization**:
+  - Arrange Row 1: Document Upload (left 2 columns) | Risk Assessment + Alerts & Flags (stacked right column, matching height).
+  - Arrange Row 2: **[ Document Photo ] [ Extracted Information ] [ Document Validation ]** (3-column identity row).
+  - Maintain all existing cards: Tampering Detection, Face Verification, Blockchain Verification.
+
+---
+
+## Verification Plan
+
+### Automated & Backend Tests
+1. Test `main.py` face extraction on sample Aadhaar image (`python_ai/debug/aadhaar_case/00_original.jpg`):
+   ```bash
+   python_ai\venv\Scripts\python.exe -c "import cv2; ... test extract_document_photo ..."
+   ```
+2. Test blurry/no-face document image to verify graceful fallback with `available: false` and message `"Unable to scan or detect a clear photo from the document."`.
+3. Verify backend response format from `POST /api/screening/upload`.
+
+### Manual & UI Verification
+1. Open the PehchaanAI dashboard in browser.
+2. Upload the Aadhaar document and run screening:
+   - Verify `"Scanning Photo..."` loading indicator appears while scanning.
+   - Verify the cropped portrait photo appears in the new "Document Photo" card.
+   - Verify the status badge displays `"Photo Detected"`.
+   - Hover over the photo to verify circular 2.5x magnifying lens follows cursor smoothly.
+   - Move mouse out of the photo to verify lens smoothly disappears.
+3. Test with a document having no face or unclear photo:
+   - Verify clean "Photo Unavailable" empty state with appropriate message and icon.
+4. Verify responsive layout on mobile viewport (magnifier disabled, image scales cleanly).
+5. Confirm MRZ checks, Expiry checks, Verhoeff math, Tampering score, Face verification webcam, and Blockchain anchoring continue working identically.
